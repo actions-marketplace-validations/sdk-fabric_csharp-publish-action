@@ -10,9 +10,6 @@ inputs:
   nuget_user:
     description: 'The Nuget user'
     required: true
-  namespace:
-    description: 'Namespace of the project'
-    required: true
 runs:
   using: "composite"
   steps:
@@ -27,15 +24,35 @@ runs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: '8.x'
+    - name: Read namespace
+      shell: bash
+      run: |
+        if [ ! -f "./.sdk-fabric.json" ]; then
+          echo "Error: .sdk-fabric.json not found at the root of the repository!"
+          exit 1
+        fi
+        NAMESPACE=$(jq -r '.namespace' .sdk-fabric.json)
+        if [ -z "$NAMESPACE" ] || [ "$NAMESPACE" = "null" ]; then
+          echo "Error: 'namespace' field not found or empty in .sdk-fabric.json"
+          exit 1
+        fi
+        echo "Detected namespace: $NAMESPACE"
+        echo "NAMESPACE=$NAMESPACE" >> $GITHUB_ENV
     - name: Copy csproj
       shell: bash
-      run: cp ./project.csproj ./src/${{ inputs.namespace }}/${{ inputs.namespace }}.csproj
+      run: |
+        TARGET_DIR="./src/${{ env.NAMESPACE }}"
+        if [ ! -d "$TARGET_DIR" ]; then
+          echo "Error: Source directory $TARGET_DIR does not exist! Generator step may have failed."
+          exit 1
+        fi
+        cp ./project.csproj "$TARGET_DIR/${{ env.NAMESPACE }}.csproj"
     - name: Set version
       shell: bash
-      run: sed -i 's/0.1.0/${{ inputs.typehub_version }}/g' ./src/${{ inputs.namespace }}/${{ inputs.namespace }}.csproj
+      run: sed -i 's/0.1.0/${{ inputs.typehub_version }}/g' ./src/${{ env.NAMESPACE }}/${{ env.NAMESPACE }}.csproj
     - name: Create and push NuGet package
       shell: bash
-      working-directory: ./src/${{ inputs.namespace }}
+      working-directory: ./src/${{ env.NAMESPACE }}
       run: |
         dotnet pack -c Release
         dotnet nuget push bin/Release/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
