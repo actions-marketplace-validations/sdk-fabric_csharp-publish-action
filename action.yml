@@ -1,0 +1,41 @@
+name: 'SDK-Fabric C# Publish'
+description: 'SDK-Fabric GitHub action to publish a C# release'
+branding:
+  icon: 'upload'
+  color: 'green'
+inputs:
+  typehub_version:
+    description: 'The provided TypeHub version'
+    required: true
+  nuget_user:
+    description: 'The Nuget user'
+    required: true
+  namespace:
+    description: 'Namespace of the project'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: NuGet login
+      uses: NuGet/login@v1
+      id: login
+      with:
+        user: ${{ inputs.nuget_user }}
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.x'
+    - name: Copy csproj
+      shell: bash
+      run: cp ./project.csproj ./src/${{ inputs.namespace }}/${{ inputs.namespace }}.csproj
+    - name: Set version
+      shell: bash
+      run: sed -i 's/0.1.0/${{ inputs.typehub_version }}/g' ./src/${{ inputs.namespace }}/${{ inputs.namespace }}.csproj
+    - name: Create and push NuGet package
+      shell: bash
+      working-directory: ./src/${{ inputs.namespace }}
+      run: |
+        dotnet pack -c Release
+        dotnet nuget push bin/Release/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
